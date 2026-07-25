@@ -1,0 +1,12 @@
+[
+  {
+    "id": "byzantine-minority",
+    "title": "Byzantine minority \u2014 3/15 nodes corrupted, network still converges",
+    "file": "byzantine-minority.trace.json"
+  },
+  {
+    "id": "partition-heal",
+    "title": "Network partition & heal \u2014 an echo chamber forms, then gets corrected",
+    "file": "partition-heal.trace.json"
+  }
+]
