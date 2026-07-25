@@ -9,7 +9,7 @@
 (function () {
   "use strict";
 
-  const ROUND_INTERVAL_MS = 1450; // paced so each round's belief changes are legible, not a blur
+  const ROUND_INTERVAL_MS = 1150; // paced so each round's belief changes are legible, not a blur
   const THEME_KEY = "gossiprag-theme";
 
   const prefersReducedMotion =
@@ -459,6 +459,14 @@
       }
       graphView.gotoRound(next);
       afterRoundChange();
+      // Auto-stop once the network has fully converged and settled — the rest
+      // of the trace is static "everyone still agrees" rounds, and grinding
+      // through them looks like nothing is happening. (Only triggers at 100%,
+      // so partition-heal still plays through its long 50% echo-chamber phase.)
+      const rounds = currentTrace.rounds;
+      if (next >= 1 && rounds[next].convergence_pct >= 100 && rounds[next - 1].convergence_pct >= 100) {
+        pausePlayback();
+      }
     }, ROUND_INTERVAL_MS);
   }
 

@@ -21,7 +21,7 @@ window.GossipRAG = window.GossipRAG || {};
   const NODE_R_MAX = 15;
   const COLOR_EASE_RATE = 18;
   const TRUST_EASE_RATE = 9;
-  const CONV_EASE_RATE = 6;
+  const CONV_EASE_RATE = 14; // tight enough that the core number tracks reality, not lags it
   const TRAVEL_MS = 620;
   const POP_MS = 660;
   const STAGGER_MAX_MS = 130;
@@ -185,7 +185,9 @@ window.GossipRAG = window.GossipRAG || {};
 
       targetConv = round.convergence_pct / 100;
 
-      const animate = singleStepForward && !prefersReducedMotion && prev;
+      // packets/flips still animate under reduced-motion (they're functional,
+      // not decorative); only the continuous ambient sweep is suppressed there
+      const animate = singleStepForward && prev;
       const changed = [];
       nodeIds.forEach((id) => {
         const nv = round.node_states[id].value;
@@ -314,26 +316,38 @@ window.GossipRAG = window.GossipRAG || {};
       const tt = 1 - Math.exp(-TRUST_EASE_RATE * dt);
       const vt = 1 - Math.exp(-CONV_EASE_RATE * dt);
 
+      let animating = false;
       nodeIds.forEach((id) => {
         const nr = runtime[id];
         if (nr.pendingValue !== undefined && now >= nr.pendingAt) {
           nr.targetValue = nr.pendingValue;
           nr.pendingValue = undefined;
         }
+        if (nr.pendingValue !== undefined) animating = true; // packet in flight
         const target = beliefColorFor(nr.targetValue);
         nr.dispColor = mix(nr.dispColor, target, ct);
         nr.dispTrust = lerp(nr.dispTrust, nr.targetTrust, tt);
+        if (
+          Math.abs(nr.dispColor.r - target.r) > 0.6 ||
+          Math.abs(nr.dispColor.g - target.g) > 0.6 ||
+          Math.abs(nr.dispColor.b - target.b) > 0.6 ||
+          Math.abs(nr.dispTrust - nr.targetTrust) > 0.003
+        ) {
+          animating = true;
+        }
       });
       dispConv = lerp(dispConv, targetConv, vt);
+      if (Math.abs(dispConv - targetConv) > 0.002) animating = true;
 
       transmissions = transmissions.filter((t) => now < t.arrive);
       pops = pops.filter((p) => now - p.start < POP_MS);
+      if (transmissions.length || pops.length) animating = true;
 
       render(ts, now);
-      // the ambient sweep keeps the scope alive, so we always keep drawing
-      // (browsers throttle rAF when the tab is hidden, so this idles cheaply)
-      if (!prefersReducedMotion) requestRender();
-      else if (transmissions.length || pops.length || Math.abs(dispConv - targetConv) > 0.001) requestRender();
+      // Normal: keep drawing so the ambient sweep stays alive. Reduced-motion:
+      // there's no sweep, so only keep drawing while something is transitioning.
+      // (Browsers throttle rAF when the tab is hidden, so this idles cheaply.)
+      if (!prefersReducedMotion || animating) requestRender();
       else lastTs = 0;
     }
 
@@ -439,17 +453,25 @@ window.GossipRAG = window.GossipRAG || {};
         ctx.quadraticCurveTo(ctrl.x, ctrl.y, nb.x, nb.y);
         ctx.stroke();
 
+        // a short comet trail makes the travel direction unmistakable
+        for (let k = 1; k <= 3; k++) {
+          const tp = qbez(na, ctrl, nb, easeInOutQuad(clamp01(progress - k * 0.05)));
+          ctx.beginPath();
+          ctx.fillStyle = rgbStr(t.color, 0.28 * (1 - k / 4));
+          ctx.arc(tp.x, tp.y, 6 - k, 0, Math.PI * 2);
+          ctx.fill();
+        }
         // the packet
         const p = qbez(na, ctrl, nb, easeInOutQuad(progress));
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = 14;
         ctx.beginPath();
         ctx.fillStyle = rgbStr(t.color, 1);
-        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.beginPath();
         ctx.fillStyle = rgbStr(theme.surface, 0.95);
-        ctx.arc(p.x, p.y, 1.7, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       });
@@ -491,7 +513,10 @@ window.GossipRAG = window.GossipRAG || {};
       ctx.font = `600 ${Math.round(coreR * 0.5)}px ${fonts.display}`;
       ctx.fillText(Math.round(frac * 100) + "%", cx, cy + coreR * 0.06);
 
-      const status = frac >= 0.999 ? "CONSENSUS" : frac >= 0.6 ? "CONVERGING" : "CONTESTED";
+      // status word tracks the true value (not the eased number) so it never
+      // shows a contradiction like "100% CONVERGING" while the count settles
+      const truth = clamp01(targetConv);
+      const status = truth >= 0.999 ? "CONSENSUS" : truth >= 0.6 ? "CONVERGING" : "CONTESTED";
       ctx.fillStyle = rgbStr(health, 0.9);
       ctx.font = `600 8.5px ${fonts.mono}`;
       ctx.textBaseline = "top";
