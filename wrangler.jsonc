@@ -1,0 +1,14 @@
+{
+  // Static-assets-only Worker: serves the trace viewer (ui/ + traces/)
+  // assembled into ./deploy by scripts/build-site.sh. No server code, no build
+  // step beyond copying files. Live at gossip-rag.pulsar-projects.org.
+  "name": "gossip-rag",
+  "account_id": "a82a6302a28c6c2e55c2259f35d17683",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./deploy"
+  },
+  "routes": [
+    { "pattern": "gossip-rag.pulsar-projects.org", "custom_domain": true }
+  ]
+}
