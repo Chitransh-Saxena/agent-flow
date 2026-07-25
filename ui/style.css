@@ -512,7 +512,21 @@ html[data-theme="dark"] .icon-moon { display: block; }
   color: var(--text);
 }
 .round-log__outcome { font-size: 12px; color: var(--text-3); line-height: 1.5; }
-.round-log__empty { padding: var(--space-2) var(--space-4) var(--space-4); font-family: var(--font-mono); font-size: 11.5px; color: var(--text-4); }
+.round-log__empty { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-4); }
+
+/* meaningful changes get a leading colored dot + a slightly stronger row */
+.round-log__item--change { position: relative; padding-left: 16px; }
+.round-log__item--change .round-log__dot {
+  position: absolute; left: 2px; top: 5px; width: 7px; height: 7px; border-radius: 50%;
+}
+.round-log__item--adopt .round-log__dot,
+.round-log__item--switch .round-log__dot,
+.round-log__item--forced .round-log__dot { background: var(--green); }
+.round-log__item--switch .round-log__dot { box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 30%, transparent); }
+.round-log__item--change .round-log__outcome { color: var(--text-2); }
+.round-log__item--reject { padding-left: 16px; opacity: 0.72; }
+.round-log__item--reject .round-log__edge { color: var(--text-3); font-weight: 500; }
+.round-log__summary { font-family: var(--font-mono); font-size: 11px; color: var(--text-4); padding-top: 2px; }
 
 /* ==========================================================================
    Detail panel

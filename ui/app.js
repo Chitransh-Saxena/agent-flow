@@ -9,7 +9,7 @@
 (function () {
   "use strict";
 
-  const ROUND_INTERVAL_MS = 1000; // within the 900-1200ms spec range
+  const ROUND_INTERVAL_MS = 1450; // paced so each round's belief changes are legible, not a blur
   const THEME_KEY = "gossiprag-theme";
 
   const prefersReducedMotion =
@@ -250,6 +250,15 @@
     }
   }
 
+  function eventKind(ev) {
+    const o = ev.outcome;
+    if (o.startsWith("adopted")) return "adopt";
+    if (o.startsWith("switched")) return "switch";
+    if (o.startsWith("trust fell")) return "forced";
+    if (o.startsWith("rejected")) return "reject";
+    return "corroborate";
+  }
+
   function renderRoundLog(idx) {
     const round = currentTrace.rounds[idx];
     roundLogList.replaceChildren();
@@ -263,13 +272,54 @@
       );
       return;
     }
+
+    // Mirror the graph: surface the exchanges that actually moved a belief,
+    // then rejections, and collapse the (usually many) corroborations into a
+    // single summary line so they don't bury the signal.
+    const changes = [];
+    const rejects = [];
+    let corroborations = 0;
     round.events.forEach((ev) => {
+      const kind = eventKind(ev);
+      if (kind === "corroborate") corroborations++;
+      else if (kind === "reject") rejects.push(ev);
+      else changes.push({ ev, kind });
+    });
+
+    const kindLabel = { adopt: "adopted", switch: "switched", forced: "forced onto consensus" };
+
+    changes.forEach(({ ev, kind }) => {
       const li = document.createElement("li");
-      li.className = "round-log__item";
+      li.className = "round-log__item round-log__item--change round-log__item--" + kind;
+      li.appendChild(el("span", "round-log__dot", ""));
       li.appendChild(el("span", "round-log__edge", ev.from + " → " + ev.to));
-      li.appendChild(el("span", "round-log__outcome", 'sent "' + ev.claim_value_sent + '" — ' + ev.outcome));
+      li.appendChild(
+        el("span", "round-log__outcome", ev.to + " " + kindLabel[kind] + ' "' + ev.claim_value_sent + '"')
+      );
       roundLogList.appendChild(li);
     });
+
+    rejects.forEach((ev) => {
+      const li = document.createElement("li");
+      li.className = "round-log__item round-log__item--reject";
+      li.appendChild(el("span", "round-log__edge", ev.to + " ✕ " + ev.from));
+      li.appendChild(el("span", "round-log__outcome", ev.to + ' held its belief, rejecting "' + ev.claim_value_sent + '"'));
+      roundLogList.appendChild(li);
+    });
+
+    if (corroborations) {
+      roundLogList.appendChild(
+        el("li", "round-log__summary", "// + " + corroborations + " corroboration" + (corroborations === 1 ? "" : "s") + " — neighbors already agreed")
+      );
+    }
+
+    if (!changes.length && !rejects.length) {
+      // pure-corroboration round: make the "nothing moved" state explicit
+      roundLogList.insertBefore(
+        el("li", "round-log__empty", "// network steady — no beliefs changed this round"),
+        roundLogList.firstChild
+      );
+    }
   }
 
   // ---- node detail panel --------------------------------------------------
