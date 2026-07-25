@@ -359,10 +359,12 @@ html[data-theme="dark"] .icon-moon { display: block; }
 .graph-panel__canvas-wrap {
   position: relative;
   width: 100%;
-  height: 480px;
+  height: 520px;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: var(--surface);
+  background:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 4%, transparent), transparent 60%),
+    var(--surface);
 }
 #graphCanvas { display: block; width: 100%; height: 100%; }
 

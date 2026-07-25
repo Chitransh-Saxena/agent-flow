@@ -8,9 +8,9 @@ style eventual consistency), with trust-weighted reconciliation to resolve
 disagreement. Some nodes are seeded with corrupted or stale claims. Watch
 whether — and how — the network heals.
 
-![gossip-rag: a 15-node network converging from a byzantine-seeded split to full agreement — red packets carry the false claim, green packets the truth, and each node flips colour the moment a belief lands](docs/convergence.gif)
+![gossip-rag consensus scope: a 15-node network healing from a byzantine-seeded split, the central gauge filling red→green as agreement rises from 40% to 100%](docs/convergence.gif)
 
-*Green = agrees with the truth · red = holds the corrupted claim · grey = uninformed. Only exchanges that actually change a belief are animated — a coloured packet flies down the edge and the receiving node flips when it lands; the many "we already agree" corroborations stay silent.*
+*Blips on the ring are agents (green = agrees with the truth · red = holds the corrupted claim · grey = uninformed); the core is a live consensus gauge. Only exchanges that actually change a belief are animated — a colour-coded packet rides the chord and the receiving blip flips the instant it lands; the many "we already agree" corroborations stay silent.*
 
 ## The problem
 

@@ -74,10 +74,10 @@
             <span class="stat__label">round</span>
             <span class="stat__value" id="roundValue">0 / 0</span>
           </div>
-          <div class="stat stat--big">
+          <div class="stat">
             <span class="stat__label">convergence</span>
             <div class="stat__row">
-              <span class="stat__value--display" id="convergenceValue">0.0%</span>
+              <span class="stat__value" id="convergenceValue">0.0%</span>
               <span class="trend trend--neutral" id="trendValue">—</span>
             </div>
           </div>
@@ -104,7 +104,7 @@
           <span class="legend__item"><i class="legend__dot legend__dot--green"></i>matches truth</span>
           <span class="legend__item"><i class="legend__dot legend__dot--red"></i>diverges / corrupted</span>
           <span class="legend__item"><i class="legend__dot legend__dot--gray"></i>uninformed</span>
-          <span class="legend__note">// node size &amp; opacity ∝ trust</span>
+          <span class="legend__note">// blip size ∝ trust · centre = live consensus</span>
         </div>
 
         <div class="transport">
@@ -153,7 +153,6 @@
   <p class="footer">gossip-rag — anti-entropy gossip protocol simulation · trace viewer runs entirely client-side, zero backend, zero external dependencies</p>
 </div>
 
-<script src="force-layout.js"></script>
 <script src="graph-view.js"></script>
 <script src="app.js"></script>
 </body>

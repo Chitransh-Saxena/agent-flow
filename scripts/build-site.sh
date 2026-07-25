@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 
 rm -rf deploy
 mkdir -p deploy/traces
-cp ui/index.html ui/app.js ui/style.css ui/graph-view.js ui/force-layout.js deploy/
+cp ui/index.html ui/app.js ui/style.css ui/graph-view.js deploy/
 cp traces/*.json deploy/traces/
 
 echo "built deploy/ ($(find deploy -type f | wc -l | tr -d ' ') files)"
