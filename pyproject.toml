@@ -1,0 +1,22 @@
+[project]
+name = "gossip-rag"
+version = "0.1.0"
+description = "How truth survives (or doesn't) in a decentralized multi-agent RAG network — an anti-entropy gossip protocol simulator with trust-weighted reconciliation."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Chitransh Saxena" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+gossiprag = "gossiprag.simulate:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
