@@ -6,16 +6,15 @@ on:
   pull_request:
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
-      - run: pytest -v
-      - run: python -m gossiprag run --all
+      - name: Assemble the static site
+        run: bash scripts/build-site.sh
+      - name: Sanity-check the output
+        run: |
+          test -f deploy/index.html
+          test -f deploy/app.js
+          test -f deploy/workflows.js
+          test -f deploy/style.css

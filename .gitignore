@@ -1,9 +1,3 @@
-__pycache__/
-*.pyc
-.pytest_cache/
-.venv/
-*.egg-info/
-build/
-dist/
 .DS_Store
 deploy/
+node_modules/

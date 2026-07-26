@@ -3,22 +3,17 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>gossip-rag — trace viewer</title>
-<meta name="description" content="Animated, explorable visualization of anti-entropy gossip protocol traces — watch trust-weighted reconciliation heal a peer-to-peer network toward the true fact." />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='5' cy='18' r='2.6' fill='%232563eb'/%3E%3Ccircle cx='19' cy='18' r='2.6' fill='%232563eb'/%3E%3Ccircle cx='12' cy='5' r='2.6' fill='%232563eb'/%3E%3Cpath d='M7 17l3-10M17 17l-3-10M8 18h8' stroke='%232563eb' stroke-width='1.4' fill='none'/%3E%3C/svg%3E" />
+<title>gossip-rag — agentic workflow simulator</title>
+<meta name="description" content="A mock agentic-AI workflow simulator: watch real-shaped agent pipelines (deep research, RAG Q&A, multi-agent code review) execute step by step. Fully mocked — no live model calls — deterministic replay." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='5' cy='12' r='2.4' fill='%232563eb'/%3E%3Ccircle cx='12' cy='12' r='2.4' fill='%232563eb'/%3E%3Ccircle cx='19' cy='12' r='2.4' fill='%232563eb'/%3E%3Cpath d='M7.4 12h2.2M14.4 12h2.2' stroke='%232563eb' stroke-width='1.6'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="style.css" />
 <script>
-  // Set the theme before first paint to avoid a flash of the wrong theme.
-  // Manual toggle (below, in app.js) persists the override to localStorage;
-  // absent an override, this follows the OS-level prefers-color-scheme.
   (function () {
     try {
       var stored = localStorage.getItem("gossiprag-theme");
       var theme = stored || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
       document.documentElement.setAttribute("data-theme", theme);
-    } catch (e) {
-      /* localStorage unavailable (e.g. file:// in some browsers) — fall back silently */
-    }
+    } catch (e) {}
   })();
 </script>
 </head>
@@ -28,18 +23,18 @@
   <header class="topbar">
     <div class="topbar__brand">
       <svg class="topbar__mark" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="5" cy="18" r="2.6" fill="currentColor" />
-        <circle cx="19" cy="18" r="2.6" fill="currentColor" />
-        <circle cx="12" cy="5" r="2.6" fill="currentColor" />
-        <path d="M7 17l3-10M17 17l-3-10M8 18h8" stroke="currentColor" stroke-width="1.4" fill="none" />
+        <circle cx="5" cy="12" r="2.4" fill="currentColor" />
+        <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+        <circle cx="19" cy="12" r="2.4" fill="currentColor" />
+        <path d="M7.4 12h2.2M14.4 12h2.2" stroke="currentColor" stroke-width="1.6" />
       </svg>
       <span class="topbar__name">gossip-rag</span>
-      <span class="topbar__tagline">// trace viewer</span>
+      <span class="topbar__tagline">// agentic workflow simulator</span>
     </div>
     <div class="topbar__controls">
       <label class="scenario-picker">
-        <span class="scenario-picker__label">scenario</span>
-        <select id="scenarioSelect" class="scenario-picker__select" aria-label="Choose scenario trace"></select>
+        <span class="scenario-picker__label">workflow</span>
+        <select id="workflowSelect" class="scenario-picker__select" aria-label="Choose workflow"></select>
       </label>
       <button id="themeToggle" class="icon-btn" type="button" aria-label="Toggle light/dark theme" title="Toggle theme (t)">
         <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
@@ -55,105 +50,64 @@
     </div>
   </header>
 
-  <div id="errorBanner" class="error-banner" hidden role="alert">
-    <span id="errorBannerText"></span>
-  </div>
+  <div id="errorBanner" class="error-banner" hidden role="alert"><span id="errorBannerText"></span></div>
 
-  <main class="layout">
-    <section class="col-main">
+  <main class="stage-wrap">
 
-      <div class="statsbar">
-        <div class="statsbar__meta">
-          <h1 class="statsbar__title" id="scenarioTitle">—</h1>
-          <p class="statsbar__desc" id="scenarioDesc"></p>
-          <p class="statsbar__claim" id="scenarioClaim"></p>
-          <p class="statsbar__caption" id="scenarioCaption"></p>
-        </div>
-        <div class="statsbar__readout">
-          <div class="stat">
-            <span class="stat__label">round</span>
-            <span class="stat__value" id="roundValue">0 / 0</span>
-          </div>
-          <div class="stat">
-            <span class="stat__label">convergence</span>
-            <div class="stat__row">
-              <span class="stat__value" id="convergenceValue">0.0%</span>
-              <span class="trend trend--neutral" id="trendValue">—</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="wf-head">
+      <h1 class="wf-title" id="wfTitle">—</h1>
+      <p class="wf-subtitle" id="wfSubtitle"></p>
+      <p class="wf-note">// mock simulation · no live model calls · deterministic replay of a real-shaped agent run</p>
+    </div>
 
-      <section class="graph-panel bracket-frame" aria-label="Gossip network graph">
-        <i class="bf-corner bf-corner--tl" aria-hidden="true"></i>
-        <i class="bf-corner bf-corner--tr" aria-hidden="true"></i>
-        <i class="bf-corner bf-corner--bl" aria-hidden="true"></i>
-        <i class="bf-corner bf-corner--br" aria-hidden="true"></i>
-
-        <div class="graph-panel__head">
-          <span class="graph-panel__label">// network</span>
-          <button id="revealBtn" class="chip-btn" type="button" aria-pressed="false">reveal seeded roles</button>
-        </div>
-
-        <div class="graph-panel__canvas-wrap">
-          <canvas id="graphCanvas" role="img" aria-label="Gossip network graph, no trace loaded yet"></canvas>
-          <div class="graph-panel__loading" id="graphLoading">loading trace…</div>
-        </div>
-
-        <div class="legend">
-          <span class="legend__item"><i class="legend__dot legend__dot--green"></i>matches truth</span>
-          <span class="legend__item"><i class="legend__dot legend__dot--red"></i>diverges / corrupted</span>
-          <span class="legend__item"><i class="legend__dot legend__dot--gray"></i>uninformed</span>
-          <span class="legend__note">// blip size ∝ trust · centre = live consensus</span>
-        </div>
-
-        <div class="transport">
-          <button id="stepBackBtn" class="transport__btn" type="button" aria-label="Step back one round">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="1.6" height="12" fill="currentColor" /><path d="M13 2.5v11L4.5 8z" fill="currentColor" /></svg>
-          </button>
-          <button id="playBtn" class="transport__btn transport__btn--primary" type="button" aria-label="Play" aria-pressed="false">
-            <svg id="playIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor" /></svg>
-            <svg id="pauseIcon" viewBox="0 0 16 16" aria-hidden="true" hidden><rect x="3.5" y="2.5" width="3" height="11" fill="currentColor" /><rect x="9.5" y="2.5" width="3" height="11" fill="currentColor" /></svg>
-          </button>
-          <button id="stepFwdBtn" class="transport__btn" type="button" aria-label="Step forward one round">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="11.4" y="2" width="1.6" height="12" fill="currentColor" /><path d="M3 2.5v11L11.5 8z" fill="currentColor" /></svg>
-          </button>
-          <input id="scrubInput" class="transport__scrub" type="range" min="0" max="0" step="1" value="0" aria-label="Scrub to round" />
-          <span class="transport__roundlabel" id="transportRoundLabel">0 / 0</span>
-        </div>
-      </section>
+    <section class="board bracket-frame" aria-label="Workflow pipeline">
+      <i class="bf-corner bf-corner--tl" aria-hidden="true"></i>
+      <i class="bf-corner bf-corner--tr" aria-hidden="true"></i>
+      <i class="bf-corner bf-corner--bl" aria-hidden="true"></i>
+      <i class="bf-corner bf-corner--br" aria-hidden="true"></i>
+      <div class="pipeline" id="pipeline"></div>
     </section>
 
-    <aside class="col-side">
-      <section class="round-log card">
-        <div class="card__head">
-          <span class="card__label">this round's exchanges</span>
-        </div>
-        <ol class="round-log__list" id="roundLogList"></ol>
-      </section>
+    <div class="meters">
+      <div class="meter"><span class="meter__label">step</span><span class="meter__value" id="mStep">0 / 0</span></div>
+      <div class="meter"><span class="meter__label">tokens</span><span class="meter__value" id="mTokens">0</span></div>
+      <div class="meter"><span class="meter__label">elapsed</span><span class="meter__value" id="mElapsed">0.0s</span></div>
+      <div class="meter meter--status"><span class="meter__label">status</span><span class="meter__value" id="mStatus">idle</span></div>
+    </div>
 
-      <section class="detail-panel bracket-frame">
-        <i class="bf-corner bf-corner--tl" aria-hidden="true"></i>
-        <i class="bf-corner bf-corner--tr" aria-hidden="true"></i>
-        <i class="bf-corner bf-corner--bl" aria-hidden="true"></i>
-        <i class="bf-corner bf-corner--br" aria-hidden="true"></i>
-        <div class="card__head">
-          <span class="card__label">node detail</span>
-          <button id="detailCloseBtn" class="icon-btn" type="button" aria-label="Close node detail" hidden>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
-          </button>
-        </div>
-        <div class="detail-panel__body" id="detailBody">
-          <p class="detail-empty">// click a node to inspect its belief state</p>
-        </div>
-      </section>
-    </aside>
+    <section class="console bracket-frame" aria-label="Agent console">
+      <i class="bf-corner bf-corner--tl" aria-hidden="true"></i>
+      <i class="bf-corner bf-corner--tr" aria-hidden="true"></i>
+      <i class="bf-corner bf-corner--bl" aria-hidden="true"></i>
+      <i class="bf-corner bf-corner--br" aria-hidden="true"></i>
+      <div class="console__head">
+        <span class="console__dot" aria-hidden="true"></span>
+        <span class="console__label">agent console</span>
+        <span class="console__meta" id="consoleMeta"></span>
+      </div>
+      <div class="console__body" id="consoleBody"></div>
+    </section>
+
+    <div class="transport">
+      <button id="stepBackBtn" class="transport__btn" type="button" aria-label="Step back">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="1.7" height="12" fill="currentColor" /><path d="M13 2.5v11L4.5 8z" fill="currentColor" /></svg>
+      </button>
+      <button id="playBtn" class="transport__btn transport__btn--primary" type="button" aria-label="Play" aria-pressed="false">
+        <svg class="icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11L13.5 8z" fill="currentColor" /></svg>
+        <svg class="icon-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.5" width="3" height="11" rx="0.6" fill="currentColor" /><rect x="9.5" y="2.5" width="3" height="11" rx="0.6" fill="currentColor" /></svg>
+      </button>
+      <button id="stepFwdBtn" class="transport__btn" type="button" aria-label="Step forward">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="11.3" y="2" width="1.7" height="12" fill="currentColor" /><path d="M3 2.5v11L11.5 8z" fill="currentColor" /></svg>
+      </button>
+      <input id="scrubInput" class="transport__scrub" type="range" min="0" max="0" step="1" value="0" aria-label="Scrub to step" />
+      <span class="transport__roundlabel" id="transportStepLabel">0 / 0</span>
+    </div>
   </main>
 
-  <p class="footer">gossip-rag — anti-entropy gossip protocol simulation · trace viewer runs entirely client-side, zero backend, zero external dependencies</p>
+  <p class="footer">gossip-rag — agentic workflow simulator · every run is mocked &amp; deterministic · runs entirely client-side, zero backend, zero dependencies</p>
 </div>
 
-<script src="graph-view.js"></script>
+<script src="workflows.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

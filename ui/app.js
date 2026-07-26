@@ -1,544 +1,422 @@
 // app.js
 //
-// Entry point: fetches the manifest + trace files, owns playback state
-// (play/pause/step/scrub), and wires up all the DOM chrome around the
-// graph (stats bar, round log, node detail panel, theme toggle). All
-// graph-specific rendering/layout/animation lives in graph-view.js /
-// force-layout.js — this file is the "controller."
+// The agentic-workflow player. It walks a workflow's `steps` timeline: each
+// step flies a packet to its stage, lights that stage up, streams a line into
+// the console, and ticks the token/latency meters — so a fully mocked run
+// reads like watching a real agent execute. No canvas; the pipeline is DOM +
+// CSS so the icons stay crisp and the motion stays smooth.
 
 (function () {
   "use strict";
 
-  const ROUND_INTERVAL_MS = 1150; // paced so each round's belief changes are legible, not a blur
-  const THEME_KEY = "gossiprag-theme";
-
-  const prefersReducedMotion =
-    window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const WF = window.GRW.WORKFLOWS;
+  const ICONS = window.GRW.ICONS;
+  const prefersReducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // ---- DOM refs ----------------------------------------------------------
+  const $ = (id) => document.getElementById(id);
+  const workflowSelect = $("workflowSelect");
+  const themeToggle = $("themeToggle");
+  const wfTitle = $("wfTitle");
+  const wfSubtitle = $("wfSubtitle");
+  const pipelineEl = $("pipeline");
+  const consoleBody = $("consoleBody");
+  const consoleMeta = $("consoleMeta");
+  const mStep = $("mStep");
+  const mTokens = $("mTokens");
+  const mElapsed = $("mElapsed");
+  const mStatus = $("mStatus");
+  const playBtn = $("playBtn");
+  const stepBackBtn = $("stepBackBtn");
+  const stepFwdBtn = $("stepFwdBtn");
+  const scrubInput = $("scrubInput");
+  const stepLabel = $("transportStepLabel");
 
-  const scenarioSelect = document.getElementById("scenarioSelect");
-  const themeToggle = document.getElementById("themeToggle");
-  const errorBanner = document.getElementById("errorBanner");
-  const errorBannerText = document.getElementById("errorBannerText");
+  // ---- state -------------------------------------------------------------
+  let wf = null; // current workflow
+  let stageIndexById = {};
+  let stepStageIdx = []; // step i -> stage index
+  let cursor = 0; // steps executed [0..N]
+  let playing = false;
+  let playTimer = null;
+  let stageEls = [];
+  let packetEl = null;
+  let progressEl = null;
+  let trackEl = null;
+  let centers = []; // stage center x (px, relative to pipeline)
+  let typeToken = 0; // cancels an in-flight typewriter
 
-  const scenarioTitleEl = document.getElementById("scenarioTitle");
-  const scenarioDescEl = document.getElementById("scenarioDesc");
-  const scenarioClaimEl = document.getElementById("scenarioClaim");
-  const scenarioCaptionEl = document.getElementById("scenarioCaption");
-
-  const roundValueEl = document.getElementById("roundValue");
-  const convergenceValueEl = document.getElementById("convergenceValue");
-  const trendValueEl = document.getElementById("trendValue");
-
-  const graphCanvas = document.getElementById("graphCanvas");
-  const graphLoading = document.getElementById("graphLoading");
-  const revealBtn = document.getElementById("revealBtn");
-
-  const stepBackBtn = document.getElementById("stepBackBtn");
-  const playBtn = document.getElementById("playBtn");
-  const playIcon = document.getElementById("playIcon");
-  const pauseIcon = document.getElementById("pauseIcon");
-  const stepFwdBtn = document.getElementById("stepFwdBtn");
-  const scrubInput = document.getElementById("scrubInput");
-  const transportRoundLabel = document.getElementById("transportRoundLabel");
-
-  const roundLogList = document.getElementById("roundLogList");
-  const detailCloseBtn = document.getElementById("detailCloseBtn");
-  const detailBody = document.getElementById("detailBody");
-
-  // ---- small DOM helpers --------------------------------------------------
-
-  function el(tag, className, text) {
+  // ---- helpers -----------------------------------------------------------
+  function el(tag, cls, html) {
     const e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text != null) e.textContent = text;
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
     return e;
   }
-
-  function clamp01(v) {
-    return v < 0 ? 0 : v > 1 ? 1 : v;
+  function svgIcon(name) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ICONS.robot}</svg>`;
+  }
+  function clamp(v, lo, hi) {
+    return v < lo ? lo : v > hi ? hi : v;
   }
 
-  // ---- state ---------------------------------------------------------
+  // ---- build the pipeline for a workflow ---------------------------------
+  function buildPipeline() {
+    pipelineEl.replaceChildren();
 
-  let manifest = [];
-  let currentTrace = null;
-  let isPlaying = false;
-  let playTimer = null;
-  let loadToken = 0;
-  let displayedConvergence = 0;
-  let convergenceToken = 0;
-  let revealOn = false;
+    trackEl = el("div", "pipeline__track");
+    progressEl = el("div", "pipeline__progress");
+    trackEl.appendChild(progressEl);
+    pipelineEl.appendChild(trackEl);
 
-  const graphView = window.GossipRAG.createGraphView(graphCanvas, {
-    onSelect: function () {
-      renderDetailPanel();
-    },
-  });
+    packetEl = el("div", "pipeline__packet");
+    packetEl.setAttribute("aria-hidden", "true");
+    pipelineEl.appendChild(packetEl);
 
-  // ---- error / loading UI ----------------------------------------------
-
-  function showError(msg) {
-    errorBannerText.textContent = msg;
-    errorBanner.hidden = false;
-  }
-  function hideError() {
-    errorBanner.hidden = true;
-  }
-  function setLoading(on) {
-    graphLoading.hidden = !on;
-  }
-  function friendlyFetchError(err) {
-    return (
-      "Couldn't load trace data (" +
-      err.message +
-      "). This viewer must be served over HTTP, not opened directly as a file. " +
-      "From the gossip-rag repo root, run: python3 -m http.server 8000 — then open " +
-      "http://localhost:8000/ui/ in your browser."
-    );
-  }
-
-  // ---- manifest / scenario loading ----------------------------------------
-
-  async function init() {
-    try {
-      const res = await fetch("../traces/manifest.json");
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      manifest = await res.json();
-    } catch (err) {
-      showError(friendlyFetchError(err));
-      setLoading(false);
-      return;
-    }
-
-    if (!Array.isArray(manifest) || manifest.length === 0) {
-      showError("No scenarios listed in traces/manifest.json.");
-      setLoading(false);
-      return;
-    }
-
-    scenarioSelect.replaceChildren(
-      ...manifest.map((entry) => {
-        const opt = document.createElement("option");
-        opt.value = entry.file;
-        opt.textContent = entry.title || entry.id;
-        return opt;
-      })
-    );
-
-    await loadScenarioFile(manifest[0].file);
-  }
-
-  async function loadScenarioFile(file) {
-    const token = ++loadToken;
-    pausePlayback();
-    setLoading(true);
-    try {
-      const res = await fetch("../traces/" + file);
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const trace = await res.json();
-      if (token !== loadToken) return; // superseded by a newer scenario pick
-
-      currentTrace = trace;
-      graphView.loadTrace(trace);
-      updateMetaHeader(trace);
-      afterRoundChange();
-      hideError();
-    } catch (err) {
-      if (token !== loadToken) return;
-      showError(friendlyFetchError(err));
-    } finally {
-      if (token === loadToken) setLoading(false);
-    }
-  }
-
-  function updateMetaHeader(trace) {
-    scenarioTitleEl.textContent = trace.meta.title;
-    scenarioDescEl.textContent = trace.meta.description;
-    scenarioClaimEl.replaceChildren(
-      el("b", null, "claim — "),
-      trace.claim.question + "   ",
-      el("span", "truth", "truth: " + trace.claim.truth_value),
-      "   ·   ",
-      el("span", "corrupted", "corrupted: " + trace.claim.corrupted_value)
-    );
-    scenarioCaptionEl.textContent =
-      "// " +
-      trace.nodes.length +
-      " nodes · " +
-      trace.rounds.length +
-      " round snapshots (0–" +
-      (trace.rounds.length - 1) +
-      ") · seed " +
-      trace.meta.seed;
-  }
-
-  scenarioSelect.addEventListener("change", () => {
-    loadScenarioFile(scenarioSelect.value);
-  });
-
-  // ---- central "round changed" refresh -----------------------------------
-
-  function afterRoundChange() {
-    if (!currentTrace) return;
-    const idx = graphView.getRoundIndex();
-    const lastIdx = currentTrace.rounds.length - 1;
-    const round = currentTrace.rounds[idx];
-
-    roundValueEl.textContent = idx + " / " + lastIdx;
-    transportRoundLabel.textContent = idx + " / " + lastIdx;
-    scrubInput.max = String(lastIdx);
-    scrubInput.value = String(idx);
-
-    setConvergence(round.convergence_pct);
-    renderTrend(idx);
-    renderRoundLog(idx);
-    renderDetailPanel();
-
-    stepBackBtn.disabled = idx === 0;
-    stepFwdBtn.disabled = idx === lastIdx;
-
-    graphCanvas.setAttribute(
-      "aria-label",
-      "Gossip network graph, round " +
-        idx +
-        " of " +
-        lastIdx +
-        ", convergence " +
-        round.convergence_pct.toFixed(1) +
-        " percent"
-    );
-  }
-
-  function setConvergence(target) {
-    const token = ++convergenceToken;
-    const from = displayedConvergence;
-    const start = performance.now();
-    const duration = prefersReducedMotion ? 1 : 400;
-    function step(now) {
-      if (token !== convergenceToken) return;
-      const t = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - t, 3);
-      const val = from + (target - from) * eased;
-      convergenceValueEl.textContent = val.toFixed(1) + "%";
-      displayedConvergence = val;
-      if (t < 1) requestAnimationFrame(step);
-      else displayedConvergence = target;
-    }
-    requestAnimationFrame(step);
-  }
-
-  function renderTrend(idx) {
-    if (idx === 0) {
-      trendValueEl.textContent = "—";
-      trendValueEl.className = "trend trend--neutral";
-      return;
-    }
-    const cur = currentTrace.rounds[idx].convergence_pct;
-    const prev = currentTrace.rounds[idx - 1].convergence_pct;
-    const delta = cur - prev;
-    if (Math.abs(delta) < 0.05) {
-      trendValueEl.textContent = "— 0.0";
-      trendValueEl.className = "trend trend--neutral";
-    } else if (delta > 0) {
-      trendValueEl.textContent = "▲ +" + delta.toFixed(1);
-      trendValueEl.className = "trend trend--up";
-    } else {
-      trendValueEl.textContent = "▼ " + delta.toFixed(1);
-      trendValueEl.className = "trend trend--down";
-    }
-  }
-
-  function eventKind(ev) {
-    const o = ev.outcome;
-    if (o.startsWith("adopted")) return "adopt";
-    if (o.startsWith("switched")) return "switch";
-    if (o.startsWith("trust fell")) return "forced";
-    if (o.startsWith("rejected")) return "reject";
-    return "corroborate";
-  }
-
-  function renderRoundLog(idx) {
-    const round = currentTrace.rounds[idx];
-    roundLogList.replaceChildren();
-    if (!round.events.length) {
-      roundLogList.appendChild(
-        el(
-          "li",
-          "round-log__empty",
-          idx === 0 ? "// initial state — no exchanges yet" : "// no exchanges this round"
-        )
-      );
-      return;
-    }
-
-    // Mirror the graph: surface the exchanges that actually moved a belief,
-    // then rejections, and collapse the (usually many) corroborations into a
-    // single summary line so they don't bury the signal.
-    const changes = [];
-    const rejects = [];
-    let corroborations = 0;
-    round.events.forEach((ev) => {
-      const kind = eventKind(ev);
-      if (kind === "corroborate") corroborations++;
-      else if (kind === "reject") rejects.push(ev);
-      else changes.push({ ev, kind });
+    stageEls = wf.stages.map((s, i) => {
+      const card = el("div", "stage is-pending");
+      card.dataset.idx = String(i);
+      card.appendChild(el("div", "stage__icon", svgIcon(s.icon)));
+      card.appendChild(el("div", "stage__label", s.label));
+      card.appendChild(el("div", "stage__step", "0" + (i + 1)));
+      pipelineEl.appendChild(card);
+      return card;
     });
 
-    const kindLabel = { adopt: "adopted", switch: "switched", forced: "forced onto consensus" };
+    requestAnimationFrame(measure);
+  }
 
-    changes.forEach(({ ev, kind }) => {
-      const li = document.createElement("li");
-      li.className = "round-log__item round-log__item--change round-log__item--" + kind;
-      li.appendChild(el("span", "round-log__dot", ""));
-      li.appendChild(el("span", "round-log__edge", ev.from + " → " + ev.to));
-      li.appendChild(
-        el("span", "round-log__outcome", ev.to + " " + kindLabel[kind] + ' "' + ev.claim_value_sent + '"')
-      );
-      roundLogList.appendChild(li);
+  function measure() {
+    if (!stageEls.length) return;
+    const prect = pipelineEl.getBoundingClientRect();
+    centers = stageEls.map((c) => {
+      const r = c.getBoundingClientRect();
+      return r.left - prect.left + r.width / 2;
     });
+    const first = centers[0];
+    const last = centers[centers.length - 1];
+    const iconTop = stageEls[0].querySelector(".stage__icon").getBoundingClientRect();
+    const y = iconTop.top - prect.top + iconTop.height / 2;
+    trackEl.style.left = first + "px";
+    trackEl.style.width = last - first + "px";
+    trackEl.style.top = y + "px";
+    packetEl.style.top = y + "px";
+    renderPositions(false);
+  }
 
-    rejects.forEach((ev) => {
-      const li = document.createElement("li");
-      li.className = "round-log__item round-log__item--reject";
-      li.appendChild(el("span", "round-log__edge", ev.to + " ✕ " + ev.from));
-      li.appendChild(el("span", "round-log__outcome", ev.to + ' held its belief, rejecting "' + ev.claim_value_sent + '"'));
-      roundLogList.appendChild(li);
+  // ---- render the visual state for the current cursor --------------------
+  function stageStatusRender() {
+    const activeStage = cursor > 0 ? stepStageIdx[cursor - 1] : -1;
+    const finished = cursor >= wf.steps.length;
+    stageEls.forEach((card, i) => {
+      card.classList.remove("is-pending", "is-active", "is-done");
+      if (i < activeStage) card.classList.add("is-done");
+      else if (i === activeStage) card.classList.add(finished ? "is-done" : "is-active");
+      else card.classList.add("is-pending");
     });
+  }
 
-    if (corroborations) {
-      roundLogList.appendChild(
-        el("li", "round-log__summary", "// + " + corroborations + " corroboration" + (corroborations === 1 ? "" : "s") + " — neighbors already agreed")
-      );
-    }
+  function renderPositions(animate) {
+    if (!centers.length) return;
+    const activeStage = cursor > 0 ? stepStageIdx[cursor - 1] : -1;
+    const targetX = activeStage >= 0 ? centers[activeStage] : centers[0];
+    const first = centers[0];
 
-    if (!changes.length && !rejects.length) {
-      // pure-corroboration round: make the "nothing moved" state explicit
-      roundLogList.insertBefore(
-        el("li", "round-log__empty", "// network steady — no beliefs changed this round"),
-        roundLogList.firstChild
-      );
+    packetEl.style.transition = animate ? "" : "none";
+    packetEl.style.transform = `translateX(${targetX}px)`;
+    packetEl.style.opacity = activeStage >= 0 ? "1" : "0";
+    progressEl.style.transition = animate ? "" : "none";
+    progressEl.style.width = Math.max(0, targetX - first) + "px";
+    if (!animate) {
+      // force reflow so the next animated change transitions from here
+      void packetEl.offsetWidth;
+      packetEl.style.transition = "";
+      progressEl.style.transition = "";
     }
   }
 
-  // ---- node detail panel --------------------------------------------------
+  // ---- console -----------------------------------------------------------
+  let pendingType = null; // an in-flight typewriter, so we can finish it early
+  function finishPending() {
+    if (!pendingType) return;
+    const p = pendingType;
+    pendingType = null;
+    typeToken++; // stop its scheduled ticks
+    p.target.textContent = "“" + p.text + "”";
+    if (p.cursorEl) p.cursorEl.remove();
+  }
 
-  function buildMeterRow(label, value01, opts) {
+  function appendLog(step, opts) {
     opts = opts || {};
-    const row = el("div", "meter-row");
-    const top = el("div", "meter-row__top");
-    top.appendChild(el("span", "detail-label", label));
-    top.appendChild(el("span", "meter-row__value", Math.round(clamp01(value01) * 100) + "%"));
-    row.appendChild(top);
-    const meter = el("div", "meter");
-    const fill = el("div", "meter__fill");
-    fill.style.width = clamp01(value01) * 100 + "%";
-    if (opts.tiered) {
-      fill.style.background = value01 >= 0.7 ? "var(--accent)" : value01 >= 0.4 ? "var(--amber)" : "var(--red)";
+    finishPending(); // any previous streamed answer snaps to complete
+    const hint = consoleBody.querySelector(".console__hint");
+    if (hint) hint.remove();
+    const line = el("div", "logline");
+    if (step.done) line.classList.add("logline--done");
+    const stageLabel = wf.stages[stepStageIdx[indexOfStep(step)]].label;
+    line.appendChild(el("span", "logline__stage", stageLabel));
+    const body = el("span", "logline__body");
+    line.appendChild(body);
+    consoleBody.appendChild(line);
+    consoleBody.scrollTop = consoleBody.scrollHeight;
+    body.textContent = step.log;
+
+    if (step.stream && !opts.instant && !prefersReducedMotion) {
+      const gen = el("div", "logline__gen");
+      const gentext = el("span", "logline__gentext");
+      const cur = el("span", "logline__cursor");
+      gen.appendChild(gentext);
+      gen.appendChild(cur);
+      line.appendChild(gen);
+      typewrite(gentext, step.stream, cur);
+    } else if (step.stream) {
+      const gen = el("div", "logline__gen");
+      gen.appendChild(el("span", "logline__gentext", "“" + step.stream + "”"));
+      line.appendChild(gen);
     }
-    meter.appendChild(fill);
-    row.appendChild(meter);
-    return row;
   }
 
-  function renderDetailPanel() {
-    const id = graphView.getSelectedId();
-    detailCloseBtn.hidden = !id;
+  function indexOfStep(step) {
+    return wf.steps.indexOf(step);
+  }
 
-    if (!id || !currentTrace) {
-      detailBody.replaceChildren(el("p", "detail-empty", "// click a node to inspect its belief state"));
-      return;
+  function typewrite(target, text, cursorEl) {
+    const myToken = ++typeToken;
+    pendingType = { target, text, cursorEl };
+    target.textContent = "“";
+    let i = 0;
+    const speed = clamp(1200 / text.length, 14, 45); // finish in ~1.2s
+    function tick() {
+      if (myToken !== typeToken) return; // superseded
+      i++;
+      target.textContent = "“" + text.slice(0, i) + (i < text.length ? "" : "”");
+      consoleBody.scrollTop = consoleBody.scrollHeight;
+      if (i < text.length) {
+        setTimeout(tick, speed);
+      } else {
+        if (cursorEl) cursorEl.remove();
+        if (pendingType && pendingType.target === target) pendingType = null;
+      }
     }
+    setTimeout(tick, speed);
+  }
 
-    const snap = graphView.getNodeSnapshot(id);
-    if (!snap) {
-      detailBody.replaceChildren(el("p", "detail-empty", "// node not found"));
-      return;
+  function rebuildConsole(upto) {
+    typeToken++; // cancel any typing
+    consoleBody.replaceChildren();
+    for (let i = 0; i < upto; i++) appendLog(wf.steps[i], { instant: true });
+    consoleBody.scrollTop = consoleBody.scrollHeight;
+  }
+
+  // ---- meters ------------------------------------------------------------
+  function sumTokens(k) {
+    let t = 0;
+    for (let i = 0; i < k; i++) t += wf.steps[i].tokens || 0;
+    return t;
+  }
+  function sumMs(k) {
+    let t = 0;
+    for (let i = 0; i < k; i++) t += wf.steps[i].ms || 0;
+    return t;
+  }
+  function tweenNumber(target, to, fmt) {
+    // per-element token — a shared counter would let the elapsed tween cancel
+    // the tokens tween (they run back-to-back), freezing one of them at 0
+    target._tw = (target._tw || 0) + 1;
+    const myToken = target._tw;
+    const from = parseFloat(target.dataset.raw || "0");
+    const start = performance.now();
+    const dur = prefersReducedMotion ? 0 : 420;
+    function frame(now) {
+      if (myToken !== target._tw) return;
+      const t = dur ? clamp((now - start) / dur, 0, 1) : 1;
+      const eased = 1 - Math.pow(1 - t, 3);
+      const val = from + (to - from) * eased;
+      target.textContent = fmt(val);
+      if (t < 1) requestAnimationFrame(frame);
+      else target.dataset.raw = String(to);
     }
+    requestAnimationFrame(frame);
+  }
+  function updateMeters() {
+    const N = wf.steps.length;
+    mStep.textContent = cursor + " / " + N;
+    stepLabel.textContent = cursor + " / " + N;
+    scrubInput.value = String(cursor);
+    tweenNumber(mTokens, sumTokens(cursor), (v) => Math.round(v).toLocaleString());
+    tweenNumber(mElapsed, sumMs(cursor) / 1000, (v) => v.toFixed(1) + "s");
 
-    const frag = document.createDocumentFragment();
+    const finished = cursor >= N;
+    mStatus.textContent = cursor === 0 ? "idle" : finished ? "done" : "running";
+    mStatus.className = "meter__value " + (cursor === 0 ? "" : finished ? "is-done" : "is-running");
+    consoleMeta.textContent = cursor === 0 ? "" : wf.stages[stepStageIdx[Math.min(cursor, N) - 1]].label.toLowerCase();
+  }
 
-    const idRow = el("div", "detail-id-row");
-    idRow.appendChild(el("span", "detail-id", snap.label || snap.id));
-    idRow.appendChild(el("span", "detail-role", "role · " + snap.role));
-    frag.appendChild(idRow);
+  // ---- cursor movement ---------------------------------------------------
+  function goto(k, opts) {
+    opts = opts || {};
+    const N = wf.steps.length;
+    k = clamp(k, 0, N);
+    const forwardOne = k === cursor + 1;
+    cursor = k;
 
-    const valueBlock = el("div", "detail-value-block");
-    valueBlock.appendChild(el("span", "detail-label", "current belief"));
-    const badge = el("span", "badge");
-    if (snap.value == null) {
-      badge.classList.add("badge--gray");
-      badge.textContent = "— uninformed —";
-    } else if (currentTrace.claim && snap.value === currentTrace.claim.truth_value) {
-      badge.classList.add("badge--green");
-      badge.textContent = snap.value;
+    stageStatusRender();
+    renderPositions(!opts.snap);
+    updateMeters();
+
+    if (forwardOne && !opts.snap) {
+      // pulse the freshly-activated stage, and stream just this step's line
+      const idx = stepStageIdx[k - 1];
+      const card = stageEls[idx];
+      if (card) {
+        card.classList.remove("stage--pulse");
+        void card.offsetWidth;
+        card.classList.add("stage--pulse");
+      }
+      appendLog(wf.steps[k - 1]);
     } else {
-      badge.classList.add("badge--red");
-      badge.textContent = snap.value;
+      rebuildConsole(k);
     }
-    valueBlock.appendChild(badge);
-    frag.appendChild(valueBlock);
-
-    frag.appendChild(buildMeterRow("confidence", snap.confidence));
-    frag.appendChild(buildMeterRow("trust", snap.trust, { tiered: true }));
-
-    const provWrap = el("div", "detail-value-block");
-    provWrap.appendChild(el("span", "detail-label", "provenance"));
-    const ol = document.createElement("ol");
-    ol.className = "provenance-list";
-    if (!snap.provenance.length) {
-      ol.appendChild(el("li", null, "(none yet)"));
-    } else {
-      snap.provenance.forEach((p, i) => {
-        const li = document.createElement("li");
-        li.appendChild(el("span", "idx", String(i + 1).padStart(2, "0")));
-        li.appendChild(el("span", null, p));
-        ol.appendChild(li);
-      });
-    }
-    provWrap.appendChild(ol);
-    frag.appendChild(provWrap);
-
-    if (snap.shardDocIds && snap.shardDocIds.length) {
-      const docsWrap = el("div", "detail-value-block");
-      docsWrap.appendChild(el("span", "detail-label", "local document shards"));
-      const docsList = el("div", "detail-docs");
-      snap.shardDocIds.forEach((docId) => {
-        const doc = currentTrace.documents && currentTrace.documents[docId];
-        const text = doc ? docId + ' — "' + doc.title + '"' : docId;
-        docsList.appendChild(el("span", "detail-docs__item", text));
-      });
-      docsWrap.appendChild(docsList);
-      frag.appendChild(docsWrap);
-    }
-
-    detailBody.replaceChildren(frag);
+    updateTransportButtons();
   }
 
-  detailCloseBtn.addEventListener("click", () => {
-    graphView.selectNode(null);
-  });
-
-  // ---- playback controls --------------------------------------------------
-
-  function stepForward() {
-    if (!currentTrace) return;
-    pausePlayback();
-    graphView.gotoRound(graphView.getRoundIndex() + 1);
-    afterRoundChange();
+  // ---- playback ----------------------------------------------------------
+  function dwell(stepIdx) {
+    const step = wf.steps[stepIdx];
+    if (prefersReducedMotion) return 650;
+    return clamp((step.ms || 800) * 0.85, 850, 2200);
   }
-
-  function stepBack() {
-    if (!currentTrace) return;
-    pausePlayback();
-    graphView.gotoRound(graphView.getRoundIndex() - 1);
-    afterRoundChange();
-  }
-
-  function scrubTo(idx) {
-    if (!currentTrace) return;
-    pausePlayback();
-    graphView.gotoRound(idx);
-    afterRoundChange();
-  }
-
-  function startPlayback() {
-    if (!currentTrace || isPlaying) return;
-    if (graphView.getRoundIndex() >= currentTrace.rounds.length - 1) {
-      graphView.gotoRound(0); // restart from the top
-      afterRoundChange();
+  function play() {
+    if (playing) return;
+    if (cursor >= wf.steps.length) {
+      goto(0, { snap: true }); // restart from the top
     }
-    isPlaying = true;
+    playing = true;
     updatePlayButton();
-    playTimer = setInterval(() => {
-      const next = graphView.getRoundIndex() + 1;
-      if (next > currentTrace.rounds.length - 1) {
-        pausePlayback();
+    const tick = () => {
+      if (!playing) return;
+      if (cursor >= wf.steps.length) {
+        pause();
         return;
       }
-      graphView.gotoRound(next);
-      afterRoundChange();
-      // Auto-stop once the network has fully converged and settled — the rest
-      // of the trace is static "everyone still agrees" rounds, and grinding
-      // through them looks like nothing is happening. (Only triggers at 100%,
-      // so partition-heal still plays through its long 50% echo-chamber phase.)
-      const rounds = currentTrace.rounds;
-      if (next >= 1 && rounds[next].convergence_pct >= 100 && rounds[next - 1].convergence_pct >= 100) {
-        pausePlayback();
+      goto(cursor + 1);
+      if (cursor >= wf.steps.length) {
+        pause();
+        return;
       }
-    }, ROUND_INTERVAL_MS);
+      playTimer = setTimeout(tick, dwell(cursor - 1));
+    };
+    // first advance kicks off immediately for responsiveness
+    goto(cursor + 1);
+    if (cursor < wf.steps.length) playTimer = setTimeout(tick, dwell(cursor - 1));
+    else pause();
   }
-
-  function pausePlayback() {
-    isPlaying = false;
+  function pause() {
+    playing = false;
     if (playTimer) {
-      clearInterval(playTimer);
+      clearTimeout(playTimer);
       playTimer = null;
     }
     updatePlayButton();
   }
-
   function togglePlay() {
-    if (isPlaying) pausePlayback();
-    else startPlayback();
+    playing ? pause() : play();
   }
-
   function updatePlayButton() {
-    playIcon.hidden = isPlaying;
-    pauseIcon.hidden = !isPlaying;
-    playBtn.setAttribute("aria-pressed", String(isPlaying));
-    playBtn.setAttribute("aria-label", isPlaying ? "Pause" : "Play");
+    playBtn.classList.toggle("is-playing", playing);
+    playBtn.setAttribute("aria-pressed", String(playing));
+    playBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
+  }
+  function updateTransportButtons() {
+    stepBackBtn.disabled = cursor <= 0;
+    stepFwdBtn.disabled = cursor >= wf.steps.length;
   }
 
-  stepBackBtn.addEventListener("click", stepBack);
-  stepFwdBtn.addEventListener("click", stepForward);
-  playBtn.addEventListener("click", togglePlay);
-  scrubInput.addEventListener("input", () => scrubTo(Number(scrubInput.value)));
+  // ---- load a workflow ---------------------------------------------------
+  function loadWorkflow(id) {
+    pause();
+    wf = WF.find((w) => w.id === id) || WF[0];
+    stageIndexById = {};
+    wf.stages.forEach((s, i) => (stageIndexById[s.id] = i));
+    stepStageIdx = wf.steps.map((st) => stageIndexById[st.stage]);
 
-  revealBtn.addEventListener("click", () => {
-    revealOn = !revealOn;
-    revealBtn.setAttribute("aria-pressed", String(revealOn));
-    graphView.setRevealRoles(revealOn);
-  });
+    wfTitle.textContent = wf.title;
+    wfSubtitle.textContent = wf.subtitle;
+    scrubInput.max = String(wf.steps.length);
+    scrubInput.value = "0";
+    cursor = 0;
 
-  // ---- theme toggle --------------------------------------------------
-
-  function getTheme() {
-    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    buildPipeline();
+    consoleBody.replaceChildren();
+    consoleBody.appendChild(el("div", "console__hint", "// press play to run the simulation"));
+    // meters reset
+    mTokens.dataset.raw = "0";
+    mElapsed.dataset.raw = "0";
+    stageStatusRender();
+    updateMeters();
+    updateTransportButtons();
+    updatePlayButton();
   }
-  function setTheme(theme) {
-    document.documentElement.setAttribute("data-theme", theme);
-    try {
-      localStorage.setItem(THEME_KEY, theme);
-    } catch (e) {
-      /* localStorage unavailable — theme just won't persist across reloads */
-    }
-    graphView.refreshTheme();
-  }
+
+  // ---- theme -------------------------------------------------------------
   function toggleTheme() {
-    setTheme(getTheme() === "dark" ? "light" : "dark");
+    const cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try {
+      localStorage.setItem("gossiprag-theme", next);
+    } catch (e) {}
   }
-  themeToggle.addEventListener("click", toggleTheme);
 
-  // ---- keyboard shortcuts --------------------------------------------------
+  // ---- wire up -----------------------------------------------------------
+  function init() {
+    WF.forEach((w) => {
+      const opt = document.createElement("option");
+      opt.value = w.id;
+      opt.textContent = w.title;
+      workflowSelect.appendChild(opt);
+    });
+    workflowSelect.addEventListener("change", () => loadWorkflow(workflowSelect.value));
+    themeToggle.addEventListener("click", toggleTheme);
 
-  document.addEventListener("keydown", (e) => {
-    const tag = (e.target && e.target.tagName) || "";
-    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
-    if (e.key === " ") {
-      e.preventDefault();
-      togglePlay();
-    } else if (e.key === "ArrowRight") {
-      stepForward();
-    } else if (e.key === "ArrowLeft") {
-      stepBack();
-    } else if (e.key.toLowerCase() === "t") {
-      toggleTheme();
-    }
-  });
+    playBtn.addEventListener("click", togglePlay);
+    stepFwdBtn.addEventListener("click", () => {
+      pause();
+      goto(cursor + 1);
+    });
+    stepBackBtn.addEventListener("click", () => {
+      pause();
+      goto(cursor - 1, { snap: true });
+    });
+    scrubInput.addEventListener("input", () => {
+      pause();
+      goto(parseInt(scrubInput.value, 10) || 0, { snap: true });
+    });
 
-  // ---- go --------------------------------------------------
+    document.addEventListener("keydown", (e) => {
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      if (e.key === " ") {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.key === "ArrowRight") {
+        pause();
+        goto(cursor + 1);
+      } else if (e.key === "ArrowLeft") {
+        pause();
+        goto(cursor - 1, { snap: true });
+      } else if (e.key === "t" || e.key === "T") {
+        toggleTheme();
+      }
+    });
 
-  init();
+    window.addEventListener("resize", () => {
+      measure();
+    });
+
+    loadWorkflow(WF[0].id);
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
 })();
