@@ -105,7 +105,8 @@ svg { display: block; }
   border-bottom: 1px solid var(--border);
 }
 
-.topbar__brand { display: flex; align-items: baseline; gap: var(--space-2); }
+.topbar__brand { display: flex; align-items: baseline; gap: var(--space-2); text-decoration: none; transition: opacity var(--t-fast); }
+a.topbar__brand:hover { opacity: 0.72; }
 .topbar__mark { color: var(--accent); flex-shrink: 0; align-self: center; }
 .topbar__name {
   font-family: var(--font-mono);
