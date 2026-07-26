@@ -191,7 +191,7 @@
     const dot = svgEl("circle", "pipe-packet");
     dot.setAttribute("r", "4.5");
     packetLayer.appendChild(dot);
-    const dur = 520;
+    const dur = 720;
     const start = performance.now();
     function frame(now) {
       const t = clamp((now - start) / dur, 0, 1);
@@ -394,8 +394,13 @@
 
   // ---- playback ----------------------------------------------------------
   function dwell(colIndex) {
-    if (prefersReducedMotion) return 700;
-    return clamp(colMs(columns[colIndex]) * 0.85, 900, 2200);
+    if (prefersReducedMotion) return 900;
+    const col = columns[colIndex];
+    // calmer cadence — give each step room to be read, and streamed answers
+    // extra time to finish typing before the next step begins
+    let ms = clamp(colMs(col) * 1.15, 1500, 3200);
+    if (col.some((s) => s.stream)) ms += 900;
+    return ms;
   }
   function play() {
     if (playing) return;
