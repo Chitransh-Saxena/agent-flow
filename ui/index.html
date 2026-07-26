@@ -65,28 +65,47 @@
       <i class="bf-corner bf-corner--tr" aria-hidden="true"></i>
       <i class="bf-corner bf-corner--bl" aria-hidden="true"></i>
       <i class="bf-corner bf-corner--br" aria-hidden="true"></i>
+      <div class="board__legend" aria-hidden="true">
+        <span class="board__legend-item"><i class="board__swatch board__swatch--seq"></i>sequential</span>
+        <span class="board__legend-item"><i class="board__swatch board__swatch--par"></i>parallel · runs at once</span>
+      </div>
       <div class="pipeline" id="pipeline"></div>
     </section>
 
     <div class="meters">
       <div class="meter"><span class="meter__label">step</span><span class="meter__value" id="mStep">0 / 0</span></div>
       <div class="meter"><span class="meter__label">tokens</span><span class="meter__value" id="mTokens">0</span></div>
-      <div class="meter"><span class="meter__label">elapsed</span><span class="meter__value" id="mElapsed">0.0s</span></div>
+      <div class="meter"><span class="meter__label">elapsed <em class="meter__hint">parallel = max</em></span><span class="meter__value" id="mElapsed">0.0s</span></div>
       <div class="meter meter--status"><span class="meter__label">status</span><span class="meter__value" id="mStatus">idle</span></div>
     </div>
 
-    <section class="console bracket-frame" aria-label="Agent console">
-      <i class="bf-corner bf-corner--tl" aria-hidden="true"></i>
-      <i class="bf-corner bf-corner--tr" aria-hidden="true"></i>
-      <i class="bf-corner bf-corner--bl" aria-hidden="true"></i>
-      <i class="bf-corner bf-corner--br" aria-hidden="true"></i>
-      <div class="console__head">
-        <span class="console__dot" aria-hidden="true"></span>
-        <span class="console__label">agent console</span>
-        <span class="console__meta" id="consoleMeta"></span>
-      </div>
-      <div class="console__body" id="consoleBody"></div>
-    </section>
+    <div class="panels">
+      <section class="uth bracket-frame" aria-label="Under the hood — how this step really works">
+        <i class="bf-corner bf-corner--tl" aria-hidden="true"></i>
+        <i class="bf-corner bf-corner--tr" aria-hidden="true"></i>
+        <i class="bf-corner bf-corner--bl" aria-hidden="true"></i>
+        <i class="bf-corner bf-corner--br" aria-hidden="true"></i>
+        <div class="console__head">
+          <span class="uth__dot" aria-hidden="true"></span>
+          <span class="console__label">under the hood</span>
+          <span class="console__meta" id="uthMode"></span>
+        </div>
+        <div class="uth__body" id="uthBody"></div>
+      </section>
+
+      <section class="console bracket-frame" aria-label="Agent console">
+        <i class="bf-corner bf-corner--tl" aria-hidden="true"></i>
+        <i class="bf-corner bf-corner--tr" aria-hidden="true"></i>
+        <i class="bf-corner bf-corner--bl" aria-hidden="true"></i>
+        <i class="bf-corner bf-corner--br" aria-hidden="true"></i>
+        <div class="console__head">
+          <span class="console__dot" aria-hidden="true"></span>
+          <span class="console__label">agent console</span>
+          <span class="console__meta" id="consoleMeta"></span>
+        </div>
+        <div class="console__body" id="consoleBody"></div>
+      </section>
+    </div>
 
     <div class="transport">
       <button id="stepBackBtn" class="transport__btn" type="button" aria-label="Step back">

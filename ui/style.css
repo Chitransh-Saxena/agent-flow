@@ -1,5 +1,5 @@
 /* ==========================================================================
-   gossip-rag trace viewer — "Calm Console" design language
+   agent-flow — "Calm Console" design language
    Tokens below are reused verbatim from the companion portfolio site this
    project pairs with. Quiet, restrained, instrument-panel aesthetic:
    thin hairlines, muted semantic color, no gradients/glow/bounce.
@@ -236,76 +236,101 @@ html[data-theme="dark"] .icon-moon { display: block; }
 .bf-corner--br { bottom: -1px; right: -1px; border-bottom: 1.5px solid var(--border-strong); border-right: 1.5px solid var(--border-strong); border-bottom-right-radius: 4px; }
 
 /* ==========================================================================
-   The pipeline board
+   The pipeline board — columns left→right; a column with >1 stage is parallel
    ========================================================================== */
 
 .board {
+  position: relative;
   padding: var(--space-8) var(--space-8) var(--space-6);
   background:
     radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 55%),
     var(--surface);
   overflow: hidden;
 }
-@media (max-width: 720px) {
+@media (max-width: 780px) {
   .board { overflow-x: auto; padding: var(--space-6) var(--space-5); }
 }
+
+.board__legend {
+  position: absolute; top: var(--space-3); right: var(--space-4); z-index: 3;
+  display: flex; gap: var(--space-3);
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.03em; color: var(--text-4);
+}
+.board__legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.board__swatch { width: 16px; height: 0; border-top: 2px solid var(--border-strong); border-radius: 2px; }
+.board__swatch--par { border-top-style: dashed; border-top-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+@media (max-width: 560px) { .board__legend { display: none; } }
 
 .pipeline {
   position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
-  min-width: 620px;
-  min-height: 96px;
+  gap: var(--space-4);
+  min-width: 700px;
+  min-height: 150px;
 }
 
-/* the connecting rail + the completed-progress fill (positioned by JS) */
-.pipeline__track {
-  position: absolute;
-  height: 2px;
-  background: var(--border-strong);
-  border-radius: 2px;
-  margin-top: -1px;
+/* the SVG connector overlay (edges + flying packets), behind the cards */
+.pipe-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; overflow: visible; pointer-events: none; }
+.edge {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2;
+  opacity: 0.6;
+  transition: stroke 320ms ease, opacity 320ms ease;
 }
-.pipeline__progress {
-  position: absolute;
-  left: 0; top: 0;
-  height: 100%;
-  width: 0;
-  background: var(--accent);
-  border-radius: 2px;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent);
-  transition: width 480ms cubic-bezier(0.4, 0, 0.2, 1);
+.edge.is-lit {
+  stroke: var(--accent);
+  opacity: 1;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 45%, transparent));
 }
-/* the data packet that flies between stages */
-.pipeline__packet {
-  position: absolute;
-  left: 0; margin-left: -6px; margin-top: -6px;
-  width: 12px; height: 12px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 14px 2px color-mix(in srgb, var(--accent) 55%, transparent);
-  opacity: 0;
-  transform: translateX(0);
-  transition: transform 480ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease;
+.pipe-packet {
+  fill: var(--accent);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 75%, transparent));
+}
+
+/* a column: single stage, or several stacked = parallel */
+.pipe-col {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-width: 76px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+}
+.pipe-col--parallel {
+  gap: var(--space-3);
+  padding: 24px var(--space-2) var(--space-3);
+  border: 1px dashed color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 3.5%, transparent);
+}
+.pipe-col__tag {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--accent);
 }
 
 /* stage cards */
 .stage {
   position: relative;
-  z-index: 1;
-  flex: 1 1 0;
-  min-width: 66px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
   text-align: center;
+  cursor: pointer;
 }
 .stage__icon {
   position: relative;
-  width: 54px; height: 54px;
+  width: 50px; height: 50px;
   display: grid; place-items: center;
   border-radius: 50%;
   background: var(--surface);
@@ -313,18 +338,19 @@ html[data-theme="dark"] .icon-moon { display: block; }
   color: var(--text-4);
   transition: color 260ms ease, border-color 260ms ease, background 260ms ease, transform 260ms ease, box-shadow 260ms ease;
 }
-.stage__icon svg { width: 24px; height: 24px; }
+.stage__icon svg { width: 23px; height: 23px; }
 .stage__label {
   font-family: var(--font-mono);
-  font-size: 11px; letter-spacing: 0.02em; line-height: 1.3;
+  font-size: 10.5px; letter-spacing: 0.02em; line-height: 1.3;
   color: var(--text-4);
-  max-width: 88px;
+  max-width: 92px;
   transition: color 260ms ease;
 }
 .stage__step {
   font-family: var(--font-mono); font-size: 9px; color: var(--text-4); opacity: 0.55;
   font-feature-settings: "tnum";
 }
+.stage:hover .stage__icon { border-color: var(--text-4); color: var(--text-3); }
 
 .stage.is-active .stage__icon {
   color: var(--accent);
@@ -370,6 +396,11 @@ html[data-theme="dark"] .stage.is-done .stage__icon { color: var(--bg); }
 .meter__label {
   font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-4);
+  display: flex; align-items: baseline; gap: 6px;
+}
+.meter__hint {
+  font-style: normal; font-weight: 500; letter-spacing: 0.02em;
+  text-transform: none; color: var(--accent); opacity: 0.85;
 }
 .meter__value {
   font-family: var(--font-mono); font-size: 18px; font-weight: 500;
@@ -380,10 +411,17 @@ html[data-theme="dark"] .stage.is-done .stage__icon { color: var(--bg); }
 .meter__value.is-done { color: var(--green); }
 
 /* ==========================================================================
-   Agent console
+   Panels — "under the hood" learning panel + agent console, side by side
    ========================================================================== */
 
-.console { padding: 0; overflow: hidden; }
+.panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: stretch;
+}
+@media (max-width: 880px) { .panels { grid-template-columns: 1fr; } }
+
 .console__head {
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
@@ -396,12 +434,57 @@ html[data-theme="dark"] .stage.is-done .stage__icon { color: var(--bg); }
   box-shadow: 0 0 0 3px var(--green-subtle);
   animation: livePulse 2.4s ease-in-out infinite;
 }
+.uth__dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ghost);
+}
 @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .console__label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--text-3); }
 .console__meta { margin-left: auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-4); }
+.console__meta.is-parallel { color: var(--accent); }
+
+/* ---- under the hood ---- */
+.uth { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.uth__body {
+  padding: var(--space-4);
+  min-height: 156px; max-height: 264px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
+.uth__hint { font-family: var(--font-mono); font-size: 12px; color: var(--text-4); line-height: 1.6; }
+
+.uth__stage { display: flex; flex-direction: column; gap: 7px; animation: logIn 260ms ease-out; }
+.uth__stage + .uth__stage { padding-top: var(--space-4); border-top: 1px dashed var(--border); }
+.uth__stagehead { display: flex; align-items: center; gap: var(--space-2); }
+.uth__ico {
+  width: 26px; height: 26px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent-ghost); color: var(--accent);
+}
+.uth__ico svg { width: 16px; height: 16px; }
+.uth__name {
+  font-family: var(--font-mono); font-size: 12.5px; font-weight: 600;
+  letter-spacing: 0.01em; color: var(--text);
+}
+.uth__algo { font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+.uth__libs { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 1px; }
+.uth__libslabel {
+  font-family: var(--font-mono); font-size: 8.5px; font-weight: 600;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-4);
+  margin-right: 2px;
+}
+.uth__lib {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-2);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 2px 7px;
+}
+
+/* ---- agent console ---- */
+.console { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .console__body {
   padding: var(--space-4);
-  min-height: 156px; max-height: 250px; overflow-y: auto;
+  min-height: 156px; max-height: 264px; overflow-y: auto;
   display: flex; flex-direction: column; gap: var(--space-3);
   font-family: var(--font-mono); font-size: 12.5px; line-height: 1.5;
 }
@@ -429,6 +512,14 @@ html[data-theme="dark"] .stage.is-done .stage__icon { color: var(--bg); }
 @keyframes blink { 50% { opacity: 0; } }
 .logline--done .logline__stage { color: var(--green); background: var(--green-subtle); }
 .logline--done .logline__body { color: var(--green); }
+
+/* the "N agents in parallel" fork marker before a parallel column's logs */
+.logline--fork { margin-bottom: -2px; }
+.logline__fork {
+  font-size: 10px; letter-spacing: 0.03em; color: var(--accent);
+  padding-left: 2px; border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  padding-left: 8px;
+}
 
 /* ==========================================================================
    Transport (playback controls)
@@ -495,7 +586,7 @@ html[data-theme="dark"] .transport__btn--primary { color: var(--bg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pipeline__packet, .pipeline__progress, .stage__icon { transition: none !important; }
+  .edge, .stage__icon { transition: none !important; }
   .stage--pulse .stage__icon::after, .console__dot { animation: none !important; }
-  .logline { animation: none !important; }
+  .logline, .uth__stage { animation: none !important; }
 }
