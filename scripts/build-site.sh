@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Assemble the static site served at gossip-rag.pulsar-projects.org.
+# Assemble the static site served at agent-flow.pulsar-projects.org.
 # The player is fully self-contained (workflow data is embedded in
 # workflows.js), so there's nothing to fetch and no build step beyond copying.
 set -euo pipefail

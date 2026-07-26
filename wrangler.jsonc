@@ -1,14 +1,14 @@
 {
-  // Static-assets-only Worker: serves the trace viewer (ui/ + traces/)
+  // Static-assets-only Worker: serves the agentic-workflow simulator (ui/)
   // assembled into ./deploy by scripts/build-site.sh. No server code, no build
-  // step beyond copying files. Live at gossip-rag.pulsar-projects.org.
-  "name": "gossip-rag",
+  // step beyond copying files. Live at agent-flow.pulsar-projects.org.
+  "name": "agent-flow",
   "account_id": "a82a6302a28c6c2e55c2259f35d17683",
   "compatibility_date": "2026-07-01",
   "assets": {
     "directory": "./deploy"
   },
   "routes": [
-    { "pattern": "gossip-rag.pulsar-projects.org", "custom_domain": true }
+    { "pattern": "agent-flow.pulsar-projects.org", "custom_domain": true }
   ]
 }

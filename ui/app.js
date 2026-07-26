@@ -364,7 +364,7 @@
     const next = cur === "dark" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
     try {
-      localStorage.setItem("gossiprag-theme", next);
+      localStorage.setItem("agentflow-theme", next);
     } catch (e) {}
   }
 

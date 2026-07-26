@@ -1,4 +1,4 @@
-# gossip-rag
+# agent-flow
 
 **An agentic-AI workflow simulator — watch real-shaped agent pipelines execute, step by step.**
 
@@ -8,7 +8,7 @@ rides the rail between them, an agent console streams the run, and the token /
 latency meters tick up — so a fully **mocked** run reads like watching a real,
 sophisticated agent work.
 
-![gossip-rag agentic workflow simulator: a deep-research agent pipeline executing stage by stage — query, plan, search, retrieve, rerank, synthesize, fact-check, answer — with a streaming console and live token/latency meters](docs/workflow.gif)
+![agent-flow agentic workflow simulator: a deep-research agent pipeline executing stage by stage — query, plan, search, retrieve, rerank, synthesize, fact-check, answer — with a streaming console and live token/latency meters](docs/workflow.gif)
 
 ## It's all mocked — that's the point
 
@@ -43,13 +43,13 @@ offline, and identically every time. Nothing to configure, no API keys, no cost.
 
 ## Run it
 
-**Live:** https://gossip-rag.pulsar-projects.org
+**Live:** https://agent-flow.pulsar-projects.org
 
 Locally, it's just static files:
 
 ```bash
-git clone https://github.com/Chitransh-Saxena/gossip-rag
-cd gossip-rag
+git clone https://github.com/Chitransh-Saxena/agent-flow
+cd agent-flow
 python3 -m http.server 8000   # then open http://localhost:8000/ui/
 ```
 
