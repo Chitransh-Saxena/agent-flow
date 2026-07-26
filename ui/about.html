@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>agent-flow — what this is</title>
+<meta name="description" content="A 60-second briefing on agent-flow: a few core ideas (agents, tools, RAG, agent-to-agent orchestration, parallel vs sequential, guardrails), then the anatomy of a real A2A run and exactly how this mocked simulator maps to it." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='5' cy='12' r='2.4' fill='%232563eb'/%3E%3Ccircle cx='12' cy='12' r='2.4' fill='%232563eb'/%3E%3Ccircle cx='19' cy='12' r='2.4' fill='%232563eb'/%3E%3Cpath d='M7.4 12h2.2M14.4 12h2.2' stroke='%232563eb' stroke-width='1.6'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="style.css" />
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem("agentflow-theme");
+      var theme = stored || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body class="about">
+<div class="app">
+
+  <header class="topbar">
+    <div class="topbar__brand">
+      <svg class="topbar__mark" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="5" cy="12" r="2.4" fill="currentColor" />
+        <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+        <circle cx="19" cy="12" r="2.4" fill="currentColor" />
+        <path d="M7.4 12h2.2M14.4 12h2.2" stroke="currentColor" stroke-width="1.6" />
+      </svg>
+      <span class="topbar__name">agent-flow</span>
+      <span class="topbar__tagline">// what this is</span>
+    </div>
+    <div class="topbar__controls">
+      <a class="topbar__cta" href="index.html">launch the simulator →</a>
+      <a class="topbar__link" href="https://github.com/Chitransh-Saxena/agent-flow" target="_blank" rel="noopener">source</a>
+      <button id="themeToggle" class="icon-btn" type="button" aria-label="Toggle light/dark theme" title="Toggle theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7" />
+          </g>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 14.2A8.3 8.3 0 1 1 9.8 4a6.6 6.6 0 0 0 10.2 10.2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="about-wrap">
+
+    <!-- hero -->
+    <section class="about-hero">
+      <p class="about-eyebrow">// agentic workflow simulator · the 60-second briefing</p>
+      <h1 class="about-title">See how AI agents actually work — by watching one run.</h1>
+      <p class="about-lead">
+        <b>agent-flow</b> is a tiny, fully-mocked simulator. Pick an agent pipeline, press play, and watch it
+        execute step by step — the real <i>shape</i> of an agentic run, with no model calls, no API keys, and
+        nothing to spend. This page is the quick tour: a few ideas first, then what a real
+        <span class="nowrap">agent-to-agent</span> system looks like and where each piece shows up on screen.
+      </p>
+      <div class="about-actions">
+        <a class="btn btn--primary" href="index.html">Launch the simulator →</a>
+        <a class="btn btn--ghost" href="https://github.com/Chitransh-Saxena/agent-flow" target="_blank" rel="noopener">View the source</a>
+      </div>
+    </section>
+
+    <!-- concepts -->
+    <section class="about-section">
+      <p class="about-kicker">01 — a few ideas first</p>
+      <h2 class="about-h2">Six words that explain almost everything you'll see</h2>
+      <p class="about-intro">Slight bits, on purpose. Enough to read the screen — not a course.</p>
+
+      <div class="about-cards">
+        <div class="about-card">
+          <span class="about-card__term">Agent</span>
+          <p class="about-card__def">An LLM given a goal, some tools, and a loop. It reasons, calls a tool, reads the result, and repeats until the goal is met.</p>
+        </div>
+        <div class="about-card">
+          <span class="about-card__term">Tool</span>
+          <p class="about-card__def">A function the agent may call — a web search, a database query, a code sandbox. The model decides <i>when</i> to use <i>which</i>.</p>
+        </div>
+        <div class="about-card">
+          <span class="about-card__term">RAG</span>
+          <p class="about-card__def">Retrieval-Augmented Generation: fetch the relevant documents first, then answer grounded in them — with citations, instead of from memory.</p>
+        </div>
+        <div class="about-card">
+          <span class="about-card__term">A2A</span>
+          <p class="about-card__def">Agent-to-agent. One orchestrator delegates sub-tasks to specialist agents and combines their answers — rather than one giant prompt doing everything.</p>
+        </div>
+        <div class="about-card">
+          <span class="about-card__term">Parallel vs sequential</span>
+          <p class="about-card__def">Dependent steps wait their turn (embed → search → rerank). Independent ones run at once — so the clock is the <i>slowest</i> branch, not the sum.</p>
+        </div>
+        <div class="about-card">
+          <span class="about-card__term">Guardrail</span>
+          <p class="about-card__def">A separate check that validates an agent's output before it's trusted or acted on: a fact-check, a policy limit, a refusal. This is what makes autonomy safe.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- anatomy of a real A2A run -->
+    <section class="about-section">
+      <p class="about-kicker">02 — the real thing</p>
+      <h2 class="about-h2">What a real agent-to-agent run actually looks like</h2>
+      <p class="about-intro">
+        Under the buzzwords, a production A2A system is a handful of moving parts. Here's the anatomy —
+        and where each part shows up in the simulator.
+      </p>
+
+      <ol class="about-steps">
+        <li class="about-step">
+          <span class="about-step__num">1</span>
+          <div class="about-step__body">
+            <h3 class="about-step__title">
+              <span class="about-step__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 6h3a5 5 0 0 1 5 5M8 18h3a5 5 0 0 0 5-5"/></svg></span>
+              The orchestrator plans
+            </h3>
+            <p class="about-step__desc">A supervisor agent reads the task and decides what to do, in what order, and what can happen at once. Patterns: orchestrator-worker, plan-and-execute, ReAct.</p>
+            <p class="about-step__map">in the sim → the <b>Planner</b> / <b>Orchestrator</b> column</p>
+          </div>
+        </li>
+        <li class="about-step">
+          <span class="about-step__num">2</span>
+          <div class="about-step__body">
+            <h3 class="about-step__title">
+              <span class="about-step__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8" width="14" height="10" rx="2.2"/><path d="M12 8V4.5M2.5 12.5h2.5M19 12.5h2.5"/><circle cx="9.5" cy="13" r="1"/><circle cx="14.5" cy="13" r="1"/></svg></span>
+              Work fans out to specialists
+            </h3>
+            <p class="about-step__desc">Independent sub-tasks are dispatched concurrently to scoped agents — a searcher, a security reviewer, a drafter — each with its own context and tools.</p>
+            <p class="about-step__map">in the sim → the dashed <b>∥ parallel</b> lane; the branches light up together</p>
+          </div>
+        </li>
+        <li class="about-step">
+          <span class="about-step__num">3</span>
+          <div class="about-step__body">
+            <h3 class="about-step__title">
+              <span class="about-step__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-4 4v-4H4z"/></svg></span>
+              Agents talk through structured messages
+            </h3>
+            <p class="about-step__desc">A2A isn't free-text chatter. Agents exchange typed messages (JSON / function-calls) and share a scratchpad or memory store; the orchestrator scatters tasks and gathers typed results.</p>
+            <p class="about-step__map">in the sim → the <b>agent console</b> — each stage logs its structured step</p>
+          </div>
+        </li>
+        <li class="about-step">
+          <span class="about-step__num">4</span>
+          <div class="about-step__body">
+            <h3 class="about-step__title">
+              <span class="about-step__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg></span>
+              They reach the world through tools &amp; retrieval
+            </h3>
+            <p class="about-step__desc">Agents don't “know” things — they call tools: vector search (approximate-nearest-neighbour over embeddings), rerankers, web search, code execution.</p>
+            <p class="about-step__map">in the sim → the <b>“under the hood”</b> panel names the real algorithm + libraries</p>
+          </div>
+        </li>
+        <li class="about-step">
+          <span class="about-step__num">5</span>
+          <div class="about-step__body">
+            <h3 class="about-step__title">
+              <span class="about-step__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.8-3.4 7.9-7 9-3.6-1.1-7-4.2-7-9V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg></span>
+              Results are merged, then verified
+            </h3>
+            <p class="about-step__desc">A reduce stage dedups and combines the branches; a verifier fact-checks the claims, or a guardrail gates the output — before anything is returned or acted on.</p>
+            <p class="about-step__map">in the sim → the <b>Merge / Aggregate</b> and <b>Fact-check / Policy</b> columns</p>
+          </div>
+        </li>
+        <li class="about-step">
+          <span class="about-step__num">6</span>
+          <div class="about-step__body">
+            <h3 class="about-step__title">
+              <span class="about-step__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16l4.5-3.5"/><circle cx="12" cy="16" r="1"/></svg></span>
+              The clock is wall-clock, not sum
+            </h3>
+            <p class="about-step__desc">Because the fan-out ran concurrently, total latency is the slowest branch — not the total work. This is the whole reason to orchestrate agents instead of chaining them.</p>
+            <p class="about-step__map">in the sim → <b>TOKENS</b> sums the branches; <b>ELAPSED</b> takes the max</p>
+          </div>
+        </li>
+      </ol>
+
+      <p class="about-frameworks">
+        In the wild this is built with <b>LangGraph</b>, <b>CrewAI</b>, <b>AutoGen</b>, <b>OpenAI Swarm</b>,
+        the emerging <b>A2A protocol</b>, and <b>MCP</b> for tools. agent-flow imitates their <i>shape</i>, not their code.
+      </p>
+    </section>
+
+    <!-- what's real / what's mocked -->
+    <section class="about-section">
+      <p class="about-kicker">03 — the honest part</p>
+      <h2 class="about-h2">What's real here, and what's mocked</h2>
+
+      <div class="about-real">
+        <div class="about-real__col about-real__col--yes">
+          <span class="about-real__head"><span class="about-real__mark">✓</span> real-shaped</span>
+          <ul class="about-real__list">
+            <li>the stages, and their order, of a genuine agentic run</li>
+            <li>the fan-out / fan-in of true parallel execution</li>
+            <li>the algorithms &amp; libraries named in “under the hood”</li>
+            <li>the <span class="mono">parallel = max</span> timing math</li>
+          </ul>
+        </div>
+        <div class="about-real__col about-real__col--no">
+          <span class="about-real__head"><span class="about-real__mark">✗</span> mocked</span>
+          <ul class="about-real__list">
+            <li>no LLM, no network, no vector DB, no keys</li>
+            <li>zero tokens spent — nothing leaves your browser</li>
+            <li>every log line, token count &amp; latency is scripted</li>
+            <li>fully deterministic — the same run, every time</li>
+          </ul>
+        </div>
+      </div>
+      <p class="about-note">Think of it as a wiring diagram you can press play on — a storyboard for how agentic systems execute, not a runtime.</p>
+    </section>
+
+    <!-- cta -->
+    <section class="about-cta">
+      <h2 class="about-cta__title">That's the whole idea. Go watch one run.</h2>
+      <a class="btn btn--primary btn--lg" href="index.html">Launch the simulator →</a>
+      <p class="about-cta__hint">pick a workflow from the top-right and press play</p>
+    </section>
+
+    <p class="footer">agent-flow — agentic workflow simulator · every run is mocked &amp; deterministic · runs entirely client-side, zero backend, zero dependencies</p>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var btn = document.getElementById("themeToggle");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem("agentflow-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>
